@@ -5,10 +5,9 @@ from transformers import BertTokenizer
 from torch.utils.data import DataLoader
 
 from Datasets.cell_dataset import CellDataset
-from Datasets.test_cell_dataset import TestCellDataset
 from Datasets.sampler import CellSampler
 from utils import prepare_folders, get_device
-from model import SiameseNetwork
+from model import OrderPredictionModel
 from train import Trainer
 
 
@@ -33,17 +32,18 @@ if __name__ == "__main__":
     valid_data = info.loc[indeces[train_border:valid_border]]
     test_data = info.loc[indeces[valid_border:]]
 
-    train_data_short = train_data.iloc[:1000]
-    valid_data_short = valid_data.iloc[:1000]
+    train_data_short = train_data.iloc[:100]
+    valid_data_short = valid_data.iloc[:100]
 
     train_dataset = CellDataset('./Data/train/', train_data_short, tokenizer, 128)
     train_sampler = CellSampler(train_data_short)
-    train_dataloader = DataLoader(train_dataset, 32, drop_last=True, sampler=train_sampler)
+    train_dataloader = DataLoader(train_dataset, 64, drop_last=True, sampler=train_sampler)
 
-    valid_dataset = TestCellDataset('./Data/train/', valid_data_short, tokenizer, 128)
-    valid_dataloader = DataLoader(valid_dataset, 1, shuffle=False)
+    valid_dataset = CellDataset('./Data/train/', valid_data_short, tokenizer, 128)
+    valid_sampler = CellSampler(valid_data_short, 42)
+    valid_dataloader = DataLoader(valid_dataset, 64, drop_last=True, sampler=valid_sampler)
 
-    model = SiameseNetwork(128)
+    model = OrderPredictionModel(128)
     savedir = prepare_folders()
     device = get_device()
     

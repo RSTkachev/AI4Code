@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
-from functools import cmp_to_key
 from time import time
-from utils import kendall_tau
 
 class Trainer:
     def __init__(
@@ -40,15 +38,15 @@ class Trainer:
             print(f"Epoch {epoch}/{self.epochs}")
             start_time = time()
             train_loss = self._train_one_epoch()
-            kendall_score = self._validate()
+            valid_score = self._validate()
 
-            print(f"Train loss: {train_loss:.4f}, Valid Kendall Tau correlation: {kendall_score:.4f}")
+            print(f"Train loss: {train_loss:.4f}, Valid accuracy: {valid_score:.4f}")
             print(f"Epoch execution time: {time() - start_time:.2f} seconds")
 
-            if kendall_score > self.best_score:
-                self.best_score = kendall_score
+            if valid_score > self.best_score:
+                self.best_score = valid_score
                 self.best_model = {k: v.cpu() for k, v in self.model.state_dict().items()}
-                print(f"New best model saved with Kendall Tau: {kendall_score:.4f}")
+                print(f"New best model saved with valid accuracy: {valid_score:.4f}")
 
             if epoch % self.saving_freq == 0:
                 self._save_checkpoint(epoch, train_loss)
@@ -83,17 +81,28 @@ class Trainer:
 
     def _validate(self):
         self.model.eval()
-        true_order = []
-        predicted_order = []
+        score = 0
+        n_batches = 0
         
         with torch.no_grad():
-            for cells, correct_order in tqdm(self.valid_dataloader):
-                sorted_cells = sorted(cells, key=cmp_to_key(self._custom_compare))
-                sorted_order = [cell[0] for cell in sorted_cells]
-                true_order.append(correct_order)
-                predicted_order.append(sorted_order)
-        
-        return kendall_tau(true_order, predicted_order)
+            for (first_cell, second_cell), correct_order in tqdm(self.valid_dataloader):
+                n_batches += 1
+                output = self.model(
+                        first_cell[0].squeeze(1).to(self.device),
+                        first_cell[1].squeeze(1).to(self.device),
+                        first_cell[2].squeeze(1).to(self.device),
+                        second_cell[0].squeeze(1).to(self.device),
+                        second_cell[1].squeeze(1).to(self.device),
+                        second_cell[2].squeeze(1).to(self.device)
+                    )
+                
+                output += 0.5
+                order = output.to(dtype=torch.int32).cpu()
+                score += sum(order == correct_order).sum() / correct_order.shape[0]
+
+        score /= n_batches
+
+        return score
 
     def _save_checkpoint(self, epoch, train_loss):
         checkpoint = {

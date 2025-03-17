@@ -43,7 +43,7 @@ class CellDataset(Dataset):
         first_position = self.data.loc[filename, 'cell_order'].index(first_cell_id)
         second_position = self.data.loc[filename, 'cell_order'].index(second_cell_id)
         order = 0 if first_position < second_position else 1
-
+        
         return (
             (
                 self.files[filename][first_cell_id].get(),
