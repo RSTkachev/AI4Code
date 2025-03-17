@@ -1,87 +1,120 @@
 import torch
-import torch.optim as optim
 import torch.nn as nn
+import torch.optim as optim
 from tqdm import tqdm
-import json
-import numpy as np
-from preprocess import prepare_data, load_data
-from model import SiameseNetwork
-from metrics import kendall_tau
 from functools import cmp_to_key
+from time import time
+from utils import kendall_tau
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+class Trainer:
+    def __init__(
+        self,
+        model,
+        train_dataloader,
+        valid_dataloader,
+        savedir,
+        device,
+        epochs=10,
+        saving_freq=5,
+        lr=1e-4
+    ):
+        
+        self.device = device
 
-def train(train_data, valid_data, model, optimizer, criterion, n_epochs, path, saving_freq=10):
-    model.to(device)
+        self.model = model.to(device)
+        self.train_dataloader = train_dataloader
+        self.valid_dataloader = valid_dataloader
+        self.criterion = nn.BCELoss()
+        self.optimizer = optim.NAdam(self.model.parameters(), lr=lr)
+        self.epochs = epochs
 
-    best_score = -np.inf
-    best = None
+        self.best_score = -float('inf')
+        self.best_model = None
 
-    for epoch in range(1, n_epochs + 1):
-        model.train()
+        self.savedir = savedir
+        self.saving_freq = saving_freq
+
+    def train(self):
+        for epoch in range(1, self.epochs + 1):
+            print('*' * 80)
+            print(f"Epoch {epoch}/{self.epochs}")
+            start_time = time()
+            train_loss = self._train_one_epoch()
+            kendall_score = self._validate()
+
+            print(f"Train loss: {train_loss:.4f}, Valid Kendall Tau correlation: {kendall_score:.4f}")
+            print(f"Epoch execution time: {time() - start_time:.2f} seconds")
+
+            if kendall_score > self.best_score:
+                self.best_score = kendall_score
+                self.best_model = {k: v.cpu() for k, v in self.model.state_dict().items()}
+                print(f"New best model saved with Kendall Tau: {kendall_score:.4f}")
+
+            if epoch % self.saving_freq == 0:
+                self._save_checkpoint(epoch, train_loss)
+    
+        if self.best_model:
+            torch.save(self.best_model, f'{self.savedir}best_model.pt')
+            print("Best model saved as 'best_model.pt'.")
+
+    def _train_one_epoch(self):
+        self.model.train()
         train_loss = 0
-        n_train = 0
+        n_batches = 0
+        
+        for (first_cell, second_cell), train_label in tqdm(self.train_dataloader):
+            self.optimizer.zero_grad()
+            output = self.model(
+                first_cell[0].squeeze(1).to(self.device),
+                first_cell[1].squeeze(1).to(self.device),
+                first_cell[2].squeeze(1).to(self.device),
+                second_cell[0].squeeze(1).to(self.device),
+                second_cell[1].squeeze(1).to(self.device),
+                second_cell[2].squeeze(1).to(self.device)
+            )
+            loss = self.criterion(output, train_label.float().to(self.device))
+            loss.backward()
+            self.optimizer.step()
 
-        for index in tqdm(train_data.index):
-            train_filename = train_data.loc[index, "id"]
-            correct_order = train_data.loc[index, "cell_order"]
-            random_order = correct_order.copy()
-            np.random.shuffle(random_order)
+            train_loss += loss.item()
+            n_batches += 1
+        
+        return train_loss / n_batches
 
-            with open(f"{path}{train_filename}.json", "r") as file:
-                json_code = json.load(file)
-
-            for first, second in zip(random_order[:-1], random_order[1:]):
-                equality = 0 if correct_order.index(first) < correct_order.index(second) else 1
-
-                input_ids1, att_mask1, cell_type1 = prepare_data(json_code["cell_type"][first], json_code["source"][first])
-                input_ids2, att_mask2, cell_type2 = prepare_data(json_code["cell_type"][second], json_code["source"][second])
-
-                input_ids1, att_mask1, cell_type1 = input_ids1.to(device), att_mask1.to(device), cell_type1.to(device)
-                input_ids2, att_mask2, cell_type2 = input_ids2.to(device), att_mask2.to(device), cell_type2.to(device)
-
-                optimizer.zero_grad()
-                output = model(input_ids1, att_mask1, cell_type1, input_ids2, att_mask2, cell_type2)
-                loss = criterion(output, torch.tensor([[equality]], dtype=torch.float32).to(device))
-                train_loss += loss.item()
-                loss.backward()
-                optimizer.step()
-
-                n_train += 1
-
-        train_loss /= n_train
-
-        model.eval()
-        true_order, predicted_order = [], []
+    def _validate(self):
+        self.model.eval()
+        true_order = []
+        predicted_order = []
+        
         with torch.no_grad():
-            for index in tqdm(valid_data.index):
-                valid_filename = valid_data.loc[index, "id"]
-                correct_order = valid_data.loc[index, "cell_order"]
-                random_order = correct_order.copy()
-                np.random.shuffle(random_order)
-
-                with open(f"{path}{valid_filename}.json", "r") as file:
-                    json_code = json.load(file)
-
-                sorted_cells = sorted(random_order, key=cmp_to_key(lambda a, b: -1 if model(a, b) <= 0.5 else 1))
-                sorted_order = sorted_cells
-
+            for cells, correct_order in tqdm(self.valid_dataloader):
+                sorted_cells = sorted(cells, key=cmp_to_key(self._custom_compare))
+                sorted_order = [cell[0] for cell in sorted_cells]
                 true_order.append(correct_order)
                 predicted_order.append(sorted_order)
+        
+        return kendall_tau(true_order, predicted_order)
 
-        kendall_score = kendall_tau(true_order, predicted_order)
+    def _save_checkpoint(self, epoch, train_loss):
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': {k: v.cpu() for k, v in self.model.state_dict().items()},
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'train_loss': train_loss
+        }
+        checkpoint_path = f'{self.savedir}checkpoint_epoch_{epoch}.pt'
+        torch.save(checkpoint, checkpoint_path)
+        print(f"Checkpoint saved at {checkpoint_path}.")
 
-        if kendall_score > best_score:
-            best = {
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'train_loss': train_loss
-            }
-
-        if epoch % saving_freq == 0:
-            torch.save(best, 'models/best.pt')
-
-        print(f"Epoch {epoch}/{n_epochs}, Train loss: {train_loss}, Valid Kendall Tau: {kendall_score}")
-
-torch.save(best, 'models/best.pt')
+    def _custom_compare(self, cell1, cell2):
+        with torch.no_grad():
+            result = self.model(
+                cell1[1].squeeze(0).to(self.device), cell1[2].squeeze(0).to(self.device), cell1[3].squeeze(0).to(self.device),
+                cell2[1].squeeze(0).to(self.device), cell2[2].squeeze(0).to(self.device), cell2[3].squeeze(0).to(self.device)
+            )
+            
+            if result.item() <= 0.5:
+                return -1
+            else:
+                return 1
+            

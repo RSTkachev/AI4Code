@@ -1,0 +1,10 @@
+# Data
+Data/
+
+# Model files
+checkpoints/
+
+# Service files
+.ipynb_checkpoints
+.DS_Store
+__pycache__
