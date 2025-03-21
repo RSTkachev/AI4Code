@@ -5,7 +5,7 @@ import torch
 from transformers import BertTokenizer
 from torch.utils.data import DataLoader
 
-from Datasets.cell_dataset import CellDataset
+from Datasets.train_val_cell_dataset import TrainValCellDataset
 from Datasets.test_cell_dataset import TestCellDataset
 from Datasets.sampler import CellSampler
 from utils import prepare_folders, get_device
@@ -22,7 +22,9 @@ if __name__ == "__main__":
     info = pd.read_csv('./Data/train_orders.csv', index_col='id')
     info['cell_order'] = info['cell_order'].apply(lambda x: x.split())
     indeces = list(info.index)
-    np.random.shuffle(indeces)
+
+    rng = np.random.default_rng(42)
+    rng.shuffle(indeces)
 
     train_size = 0.7
     valid_size = 0.2
@@ -35,15 +37,15 @@ if __name__ == "__main__":
     valid_data = info.loc[indeces[train_border:valid_border]]
     test_data = info.loc[indeces[valid_border:]]
 
-    train_data_short = train_data.iloc[:10]
-    valid_data_short = valid_data.iloc[:10]
-    test_data_short = test_data.iloc[:10]
+    train_data_short = train_data.iloc[:10000]
+    valid_data_short = valid_data.iloc[:1000]
+    test_data_short = test_data.iloc[:1000]
 
-    train_dataset = CellDataset('./Data/train/', train_data_short, tokenizer, 128)
+    train_dataset = TrainValCellDataset('./Data/train/', train_data_short, tokenizer, 128)
     train_sampler = CellSampler(train_data_short)
     train_dataloader = DataLoader(train_dataset, 64, drop_last=True, sampler=train_sampler)
 
-    valid_dataset = CellDataset('./Data/train/', valid_data_short, tokenizer, 128)
+    valid_dataset = TrainValCellDataset('./Data/train/', valid_data_short, tokenizer, 128)
     valid_sampler = CellSampler(valid_data_short, 42)
     valid_dataloader = DataLoader(valid_dataset, 64, drop_last=True, sampler=valid_sampler)
 
@@ -61,7 +63,7 @@ if __name__ == "__main__":
         savedir=savedir,
         device=device,
         epochs=10,
-        early_stopping=1,
+        early_stopping=5,
         saving_freq=5,
         lr=1e-4
     )
