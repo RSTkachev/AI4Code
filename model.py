@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+
 from transformers import BertModel
+
 
 class OrderPredictionModel(nn.Module):
     def __init__(self, hidden_dim, dropout_prob=0.1):

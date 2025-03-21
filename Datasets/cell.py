@@ -5,8 +5,4 @@ class Cell:
         self.cell_type = cell_type
 
     def get(self):
-        return (
-            self.input_ids,
-            self.att_mask,
-            self.cell_type
-        )
+        return (self.input_ids, self.att_mask, self.cell_type)

@@ -1,15 +1,16 @@
 import os
 import torch
+
 from time import localtime, strftime
 from bisect import bisect
 
 
 def prepare_folders():
-    current_time = strftime('%d.%m.%Y-%H:%M', localtime())
-    savedir = f'./checkpoints/{current_time}/'
+    current_time = strftime("%d.%m.%Y-%H.%M", localtime())
+    savedir = f"./checkpoints/{current_time}/"
 
-    if not os.path.exists('./checkpoints'):
-        os.mkdir('./checkpoints/')
+    if not os.path.exists("./checkpoints"):
+        os.mkdir("./checkpoints/")
     if not os.path.exists(savedir):
         os.mkdir(savedir)
     else:
@@ -21,13 +22,11 @@ def prepare_folders():
 
     return savedir
 
+
 def get_device():
-    device = (
-        "cuda" if torch.cuda.is_available()
-        else "mps" if torch.mps.is_available()
-        else "cpu"
-    )
+    device = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
     return device
+
 
 def count_inversions(a):
     inversions = 0
@@ -37,6 +36,7 @@ def count_inversions(a):
         inversions += i - j
         sorted_so_far.insert(j, u)
     return inversions
+
 
 def kendall_tau(ground_truth, predictions):
     total_inversions = 0

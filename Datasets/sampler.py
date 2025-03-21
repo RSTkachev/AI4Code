@@ -1,4 +1,5 @@
 import numpy as np
+
 from torch.utils.data import Sampler
 
 
@@ -8,7 +9,7 @@ class CellSampler(Sampler):
         self.seed = seed
         n_pair = 0
         for row_index in self.data.index:
-            n_pair += len(self.data.loc[row_index, 'cell_order']) - 1
+            n_pair += len(self.data.loc[row_index, "cell_order"]) - 1
         self.n_pair = n_pair
 
     def __len__(self):
@@ -17,7 +18,7 @@ class CellSampler(Sampler):
     def __iter__(self):
         pairs = []
         for row_index in self.data.index:
-            cells = self.data.loc[row_index, 'cell_order'].copy()
+            cells = self.data.loc[row_index, "cell_order"].copy()
             if self.seed:
                 rng = np.random.default_rng(self.seed)
                 rng.shuffle(cells)
