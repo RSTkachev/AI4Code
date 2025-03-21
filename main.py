@@ -1,14 +1,17 @@
 import pandas as pd
 import numpy as np
 
+import torch
 from transformers import BertTokenizer
 from torch.utils.data import DataLoader
 
 from Datasets.cell_dataset import CellDataset
+from Datasets.test_cell_dataset import TestCellDataset
 from Datasets.sampler import CellSampler
 from utils import prepare_folders, get_device
 from model import OrderPredictionModel
 from train import Trainer
+from test import Tester
 
 
 if __name__ == "__main__":
@@ -32,8 +35,9 @@ if __name__ == "__main__":
     valid_data = info.loc[indeces[train_border:valid_border]]
     test_data = info.loc[indeces[valid_border:]]
 
-    train_data_short = train_data.iloc[:100]
-    valid_data_short = valid_data.iloc[:100]
+    train_data_short = train_data.iloc[:10]
+    valid_data_short = valid_data.iloc[:10]
+    test_data_short = test_data.iloc[:10]
 
     train_dataset = CellDataset('./Data/train/', train_data_short, tokenizer, 128)
     train_sampler = CellSampler(train_data_short)
@@ -42,6 +46,9 @@ if __name__ == "__main__":
     valid_dataset = CellDataset('./Data/train/', valid_data_short, tokenizer, 128)
     valid_sampler = CellSampler(valid_data_short, 42)
     valid_dataloader = DataLoader(valid_dataset, 64, drop_last=True, sampler=valid_sampler)
+
+    test_dataset = TestCellDataset('./Data/train/', test_data_short, tokenizer, 128)
+    test_dataloader = DataLoader(test_dataset, 1, shuffle=False)
 
     model = OrderPredictionModel(128)
     savedir = prepare_folders()
@@ -54,8 +61,18 @@ if __name__ == "__main__":
         savedir=savedir,
         device=device,
         epochs=10,
+        early_stopping=1,
         saving_freq=5,
         lr=1e-4
     )
 
     trainer.train()
+
+    best_model_weights = torch.load(f'{savedir}best_model.pt', weights_only=True)
+    model.load_state_dict(best_model_weights)
+    
+    print("*" * 80)
+    print("Test model")
+    tester = Tester(model, device)
+    result = tester.test(test_dataloader)
+    print(f"Kendall Tau score: {result}")

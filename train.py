@@ -13,6 +13,7 @@ class Trainer:
         savedir,
         device,
         epochs=10,
+        early_stopping=5,
         saving_freq=5,
         lr=1e-4
     ):
@@ -25,6 +26,7 @@ class Trainer:
         self.criterion = nn.BCELoss()
         self.optimizer = optim.NAdam(self.model.parameters(), lr=lr)
         self.epochs = epochs
+        self.early_stopping = early_stopping
 
         self.best_score = -float('inf')
         self.best_model = None
@@ -33,6 +35,10 @@ class Trainer:
         self.saving_freq = saving_freq
 
     def train(self):
+        early_stopping_remaining = self.early_stopping
+        print('*' * 80)
+        print(f"Train model")
+
         for epoch in range(1, self.epochs + 1):
             print('*' * 80)
             print(f"Epoch {epoch}/{self.epochs}")
@@ -44,12 +50,19 @@ class Trainer:
             print(f"Epoch execution time: {time() - start_time:.2f} seconds")
 
             if valid_score > self.best_score:
+                early_stopping_remaining = self.early_stopping
                 self.best_score = valid_score
                 self.best_model = {k: v.cpu() for k, v in self.model.state_dict().items()}
                 print(f"New best model saved with valid accuracy: {valid_score:.4f}")
+            else:
+                early_stopping_remaining -= 1
 
             if epoch % self.saving_freq == 0:
                 self._save_checkpoint(epoch, train_loss)
+
+            if not early_stopping_remaining:
+                print(f"Training stopped at {epoch} epoch")
+                break
     
         if self.best_model:
             torch.save(self.best_model, f'{self.savedir}best_model.pt')
@@ -114,16 +127,4 @@ class Trainer:
         checkpoint_path = f'{self.savedir}checkpoint_epoch_{epoch}.pt'
         torch.save(checkpoint, checkpoint_path)
         print(f"Checkpoint saved at {checkpoint_path}.")
-
-    def _custom_compare(self, cell1, cell2):
-        with torch.no_grad():
-            result = self.model(
-                cell1[1].squeeze(0).to(self.device), cell1[2].squeeze(0).to(self.device), cell1[3].squeeze(0).to(self.device),
-                cell2[1].squeeze(0).to(self.device), cell2[2].squeeze(0).to(self.device), cell2[3].squeeze(0).to(self.device)
-            )
-            
-            if result.item() <= 0.5:
-                return -1
-            else:
-                return 1
             
