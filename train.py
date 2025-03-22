@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 
 from tqdm import tqdm
 from time import time
@@ -10,14 +9,14 @@ class Trainer:
     def __init__(
         self,
         model,
+        optimizer,
         train_dataloader,
         valid_dataloader,
-        savedir,
+        save_dir,
         device,
         epochs=10,
         early_stopping=5,
         saving_freq=5,
-        lr=1e-4,
     ):
 
         self.device = device
@@ -26,14 +25,14 @@ class Trainer:
         self.train_dataloader = train_dataloader
         self.valid_dataloader = valid_dataloader
         self.criterion = nn.BCELoss()
-        self.optimizer = optim.NAdam(self.model.parameters(), lr=lr)
+        self.optimizer = optimizer
         self.epochs = epochs
         self.early_stopping = early_stopping
 
         self.best_score = -float("inf")
         self.best_model = None
 
-        self.savedir = savedir
+        self.save_dir = save_dir
         self.saving_freq = saving_freq
 
     def train(self):
@@ -60,14 +59,14 @@ class Trainer:
                 early_stopping_remaining -= 1
 
             if epoch % self.saving_freq == 0:
-                self._save_checkpoint(epoch, train_loss)
+                self._save_checkpoint(epoch, valid_score)
 
             if not early_stopping_remaining:
                 print(f"Training stopped at {epoch} epoch")
                 break
 
         if self.best_model:
-            torch.save(self.best_model, f"{self.savedir}best_model.pt")
+            torch.save(self.best_model, f"{self.save_dir}best_model.pt")
             print("Best model saved as 'best_model.pt'.")
 
     def _train_one_epoch(self):
@@ -119,13 +118,13 @@ class Trainer:
 
         return score
 
-    def _save_checkpoint(self, epoch, train_loss):
+    def _save_checkpoint(self, epoch, valid_score):
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": {k: v.cpu() for k, v in self.model.state_dict().items()},
             "optimizer_state_dict": self.optimizer.state_dict(),
-            "train_loss": train_loss,
+            "valid_score": valid_score,
         }
-        checkpoint_path = f"{self.savedir}checkpoint_epoch_{epoch}.pt"
+        checkpoint_path = f"{self.save_dir}checkpoint_epoch_{epoch}.pt"
         torch.save(checkpoint, checkpoint_path)
         print(f"Checkpoint saved at {checkpoint_path}.")

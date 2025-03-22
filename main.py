@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 import torch
+import torch.optim as optim
 
-from transformers import BertTokenizer
+from transformers import AutoTokenizer
 from torch.utils.data import DataLoader
 
 from Datasets.train_val_cell_dataset import TrainValCellDataset
@@ -15,11 +16,17 @@ from test import Tester
 
 
 if __name__ == "__main__":
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    data_dir = "./Data/"
+    model_name = "microsoft/codebert-base"
+    
+    save_dir = prepare_folders()
+    device = get_device()
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
 
     print("*" * 80)
     print("Reading data")
-    info = pd.read_csv("./Data/train_orders.csv", index_col="id")
+    info = pd.read_csv(f"{data_dir}train_orders.csv", index_col="id")
     info["cell_order"] = info["cell_order"].apply(lambda x: x.split())
     indeces = list(info.index)
 
@@ -38,39 +45,38 @@ if __name__ == "__main__":
     test_data = info.loc[indeces[valid_border:]]
 
     train_data_short = train_data.iloc[:10000]
-    valid_data_short = valid_data.iloc[:1000]
-    test_data_short = test_data.iloc[:1000]
+    valid_data_short = valid_data.iloc[:100]
+    test_data_short = test_data.iloc[:100]
 
-    train_dataset = TrainValCellDataset("./Data/train/", train_data_short, tokenizer, 128)
+    train_dataset = TrainValCellDataset(f"{data_dir}train/", train_data_short, tokenizer, 128)
     train_sampler = CellSampler(train_data_short)
     train_dataloader = DataLoader(train_dataset, 64, drop_last=True, sampler=train_sampler)
 
-    valid_dataset = TrainValCellDataset("./Data/train/", valid_data_short, tokenizer, 128)
+    valid_dataset = TrainValCellDataset(f"{data_dir}train/", valid_data_short, tokenizer, 128)
     valid_sampler = CellSampler(valid_data_short, 42)
     valid_dataloader = DataLoader(valid_dataset, 64, drop_last=True, sampler=valid_sampler)
 
-    test_dataset = TestCellDataset("./Data/train/", test_data_short, tokenizer, 128)
+    test_dataset = TestCellDataset(f"{data_dir}train/", test_data_short, tokenizer, 128)
     test_dataloader = DataLoader(test_dataset, 1, shuffle=False)
 
-    model = OrderPredictionModel(128)
-    savedir = prepare_folders()
-    device = get_device()
+    model = OrderPredictionModel(model_name, 256, 0.2)
+    optimizer = optim.NAdam(model.parameters(), lr=1e-4, weight_decay=1e-5)
 
     trainer = Trainer(
         model=model,
+        optimizer=optimizer,
         train_dataloader=train_dataloader,
         valid_dataloader=valid_dataloader,
-        savedir=savedir,
+        save_dir=save_dir,
         device=device,
         epochs=10,
         early_stopping=5,
         saving_freq=5,
-        lr=1e-4,
     )
 
     trainer.train()
 
-    best_model_weights = torch.load(f"{savedir}best_model.pt", weights_only=True)
+    best_model_weights = torch.load(f"{save_dir}best_model.pt", weights_only=True)
     model.load_state_dict(best_model_weights)
 
     print("*" * 80)
