@@ -39,9 +39,9 @@ if __name__ == "__main__":
     valid_data = info.loc[indeces[train_border:valid_border]]
     test_data = info.loc[indeces[valid_border:]]
 
-    train_data_short = train_data.iloc[:10]
-    valid_data_short = valid_data.iloc[:10]
-    test_data_short = test_data.iloc[:10]
+    train_data_short = train_data.iloc[:10000]
+    valid_data_short = valid_data.iloc[:100]
+    test_data_short = test_data.iloc[:100]
 
     train_dataset = TrainValCellDataset("../AI4Code_data/train/", train_data_short, code_tokenizer, text_tokenizer, 128)
     train_sampler = CellSampler(train_data_short)
@@ -64,7 +64,7 @@ if __name__ == "__main__":
         valid_dataloader=valid_dataloader,
         savedir=savedir,
         device=device,
-        epochs=10,
+        epochs=5,
         early_stopping=5,
         saving_freq=5,
         lr=1e-4,
