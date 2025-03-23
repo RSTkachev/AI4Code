@@ -44,7 +44,7 @@ if __name__ == "__main__":
     valid_data = info.loc[indeces[train_border:valid_border]]
     test_data = info.loc[indeces[valid_border:]]
 
-    train_data_short = train_data.iloc[:10000]
+    train_data_short = train_data.iloc[:100]
     valid_data_short = valid_data.iloc[:100]
     test_data_short = test_data.iloc[:100]
 
@@ -59,19 +59,34 @@ if __name__ == "__main__":
     test_dataset = TestCellDataset(f"{data_dir}train/", test_data_short, tokenizer, 128)
     test_dataloader = DataLoader(test_dataset, 1, shuffle=False)
 
-    model = OrderPredictionModel(model_name, 256, 0.2)
-    optimizer = optim.NAdam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+    model = OrderPredictionModel(model_name, 512, 0.2)
+
+    optimizer = optim.NAdam(
+        model.parameters(),
+        lr=1e-4,
+        weight_decay=1e-5,
+        betas=(0.9, 0.999),
+        eps=1e-8
+    )
+
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer,
+        T_0=10,
+        T_mult=2,
+        eta_min=1e-6
+    )
 
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
+        scheduler=scheduler,
         train_dataloader=train_dataloader,
         valid_dataloader=valid_dataloader,
         save_dir=save_dir,
         device=device,
-        epochs=10,
+        epochs=20,
         early_stopping=5,
-        saving_freq=5,
+        saving_freq=2,
     )
 
     trainer.train()

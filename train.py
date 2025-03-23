@@ -10,6 +10,7 @@ class Trainer:
         self,
         model,
         optimizer,
+        scheduler,
         train_dataloader,
         valid_dataloader,
         save_dir,
@@ -26,6 +27,7 @@ class Trainer:
         self.valid_dataloader = valid_dataloader
         self.criterion = nn.BCELoss()
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.epochs = epochs
         self.early_stopping = early_stopping
 
@@ -44,7 +46,10 @@ class Trainer:
             print("*" * 80)
             print(f"Epoch {epoch}/{self.epochs}")
             start_time = time()
+            
             train_loss = self._train_one_epoch()
+            self.scheduler.step()
+
             valid_score = self._validate()
 
             print(f"Train loss: {train_loss:.4f}, Valid accuracy: {valid_score:.4f}")
@@ -84,11 +89,16 @@ class Trainer:
                 second_cell[1].squeeze(1).to(self.device),
                 second_cell[2].squeeze(1).to(self.device),
             )
+
             loss = self.criterion(output, train_label.float().to(self.device))
+
             loss.backward()
+
+            nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
             self.optimizer.step()
 
-            train_loss += loss.item()
+            train_loss += loss.detach().item()
             n_batches += 1
 
         return train_loss / n_batches
@@ -123,6 +133,7 @@ class Trainer:
             "epoch": epoch,
             "model_state_dict": {k: v.cpu() for k, v in self.model.state_dict().items()},
             "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": self.scheduler.state_dict(),
             "valid_score": valid_score,
         }
         checkpoint_path = f"{self.save_dir}checkpoint_epoch_{epoch}.pt"
