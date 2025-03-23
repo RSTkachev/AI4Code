@@ -3,7 +3,6 @@ from torch import nn
 from transformers import AutoModel, BertModel
 
 
-
 class ListWiseOrderPredictionModel(nn.Module):
 
     def __init__(self, hidden_dim=768, dropout_prob=0.1):
