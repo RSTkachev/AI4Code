@@ -5,12 +5,12 @@ from time import localtime, strftime
 from bisect import bisect
 
 
-def prepare_folders():
+def prepare_folders(savedir_name="checkpoints_listwise"):
     current_time = strftime("%d.%m.%Y-%H.%M", localtime())
-    savedir = f"./checkpoints/{current_time}/"
+    savedir = f"./{savedir_name}/{current_time}/"
 
-    if not os.path.exists("./checkpoints"):
-        os.mkdir("./checkpoints/")
+    if not os.path.exists(f"./{savedir_name}"):
+        os.mkdir(f"./{savedir_name}/")
     if not os.path.exists(savedir):
         os.mkdir(savedir)
     else:
